@@ -2,6 +2,12 @@
 
 > Version control — quick reference for daily use and advanced workflows.
 
+## Quick reference
+
+→ [cheatsheet.md](./cheatsheet.md) — most used commands grouped by situation
+
+---
+
 ## Index
 
 | File | Topics |
@@ -23,6 +29,7 @@
 | [hotfix-workflow.md](./examples/hotfix-workflow.md) | Urgent fix without disrupting feature work |
 | [rebase-cleanup.md](./examples/rebase-cleanup.md) | Clean up history before a PR |
 | [undo-mistakes.md](./examples/undo-mistakes.md) | Common mistakes and how to recover |
+| [daily-scenarios.md](./examples/daily-scenarios.md) | Real situations encountered every day |
 
 ---
 

@@ -46,11 +46,11 @@ git worktree remove ../hotfix             # remove a worktree
 
 ```bash
 git submodule add <url> <path>            # add a submodule
-git submodule update --init --recursive   # clone + init all submodules
-git submodule foreach git pull            # update all submodules
+git submodule update --init --recursive   # clone + init all submodules at their pinned commit
+git submodule update --remote             # update all submodules to their latest remote commit
 ```
 
-> **Pitfall:** Submodules pin to a specific commit. Always commit after updating a submodule.
+> **Pitfall:** Submodules pin to a specific commit. `update --remote` moves the pin forward — always commit the parent repo afterwards so others get the same version.
 
 ---
 
@@ -58,12 +58,13 @@ git submodule foreach git pull            # update all submodules
 
 ```bash
 git bisect start
-git bisect bad                  # current commit is broken
-git bisect good <hash>          # last known good commit
-# git tests a midpoint — mark it good or bad
-git bisect good / git bisect bad
-# repeat until the culprit is found
-git bisect reset                # exit bisect mode
+git bisect bad                  # mark current commit as broken
+git bisect good <hash>          # mark last known good commit
+# Git checks out a midpoint — test it, then mark it:
+git bisect good                 # midpoint is fine, bug is more recent
+git bisect bad                  # midpoint is broken, bug is older
+# repeat until Git identifies the culprit commit
+git bisect reset                # exit bisect mode and return to original branch
 ```
 
 ---

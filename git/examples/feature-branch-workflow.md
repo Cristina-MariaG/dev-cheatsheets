@@ -16,12 +16,12 @@ git switch -c feature/user-auth
 git add -p
 git commit -m "feat: add JWT middleware"
 
-# 4. Keep up with main (rebase, not merge)
+# 4. Keep up with main during development (do this regularly to avoid large conflicts later)
 git fetch origin
 git rebase origin/main
 
-# 5. Clean up history before PR
-git rebase -i origin/main       # squash/fixup WIP commits
+# 5. Clean up history before PR (once, just before pushing)
+git rebase -i origin/main       # squash/fixup WIP commits into clean logical commits
 
 # 6. Push and open PR
 git push -u origin feature/user-auth

@@ -7,7 +7,7 @@
 ## Basic usage
 
 ```bash
-git stash                       # stash current changes
+git stash                       # stash tracked changes (untracked files NOT included by default)
 git stash push -m "message"     # stash with a label
 git stash pop                   # apply last stash and remove it
 git stash apply                 # apply last stash, keep it in list

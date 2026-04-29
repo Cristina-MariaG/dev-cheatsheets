@@ -31,7 +31,7 @@ git branch -D <name>            # force delete
 ```bash
 git merge <branch>              # merge into current branch
 git merge --no-ff <branch>      # force a merge commit (preserves history)
-git merge --squash <branch>     # squash all commits into one staged change
+git merge --squash <branch>     # squash all commits into staged changes (still requires a manual git commit)
 ```
 
 | Strategy | When to use |
