@@ -4,6 +4,14 @@
 
 ---
 
+## What is Docker?
+
+Docker packages an application and all its dependencies into a **container** — an isolated unit that runs the same way on any machine, eliminating the *"it works on my machine"* problem.
+
+Unlike a VM, a container shares the host kernel instead of running a full OS — making it fast to start and lightweight.
+
+---
+
 ## Key concepts
 
 ### Image
