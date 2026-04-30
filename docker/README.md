@@ -25,6 +25,7 @@
 
 | File | Scenario |
 |---|---|
+| [dockerfiles.md](./examples/dockerfiles.md) | Examples, construction rules, security |
 | [dev-environment.md](./examples/dev-environment.md) | Local dev setup with Docker |
 | [multi-container-app.md](./examples/multi-container-app.md) | App + database + reverse proxy |
 | [networking.md](./examples/networking.md) | Container communication, isolation, debug |
