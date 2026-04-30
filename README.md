@@ -11,7 +11,7 @@ Personal knowledge base — quick-reference notes and cheat sheets I maintain ac
 | Status | Technology | Topics covered |
 |---|---|---|
 | ✅ | [Git](./git/README.md) | Branching, rebase, stash, hooks, worktrees |
-| ☐ | Docker | Images, containers, Compose, networking, volumes |
+| ✅ | [Docker](./docker/README.md) | Images, containers, Compose, networking, volumes |
 | ☐ | SQL | Joins, window functions, indexes, query optimization |
 | ☐ | JavaScript / TypeScript | Async patterns, TS config, generics |
 | ☐ | Python | |
