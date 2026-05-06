@@ -1,98 +1,105 @@
 # SQL — Indexes
 
-> Data structures that speed up queries by avoiding full table scans.
+> Structures de données qui accélèrent les requêtes en évitant de scanner toute la table.
 
 ---
 
-## How indexes work
+## Concept
 
-Without an index, the database scans every row to find matches (full table scan). An index is a separate data structure (usually a B-tree) that maps column values to row locations — like a book index.
+Sans index, la base de données lit chaque ligne pour trouver les correspondances — c'est un **full table scan**. Sur une table de 10 millions de lignes, c'est lent.
 
-Trade-off: indexes speed up reads but slow down writes (INSERT/UPDATE/DELETE must update the index too) and consume disk space.
+Un index est une structure séparée (généralement un B-tree) qui trie les valeurs d'une colonne et stocke des pointeurs vers les lignes. La base peut ainsi trouver une valeur en O(log n) au lieu de O(n).
+
+**Trade-off** : les index accélèrent les lectures (`SELECT`) mais ralentissent les écritures (`INSERT`, `UPDATE`, `DELETE`) car ils doivent être mis à jour à chaque modification. Ils occupent aussi de l'espace disque.
 
 ---
 
-## Creating indexes
+## Créer et supprimer des index
 
 ```sql
-CREATE INDEX idx_users_email ON users (email);                    -- single column
-CREATE INDEX idx_orders_user_date ON orders (user_id, created_at); -- composite
-CREATE UNIQUE INDEX idx_users_email_unique ON users (email);      -- enforce uniqueness
-CREATE INDEX idx_users_email_lower ON users (LOWER(email));       -- expression index
-```
-
-```sql
+CREATE INDEX idx_users_email ON users (email);                       -- colonne simple
+CREATE INDEX idx_orders_user_date ON orders (user_id, created_at);  -- index composite
+CREATE UNIQUE INDEX idx_users_email ON users (email);                -- garantit l'unicité
+CREATE INDEX idx_users_email_lower ON users (LOWER(email));          -- index sur expression
 DROP INDEX idx_users_email;
 ```
 
 ---
 
-## Index types (PostgreSQL)
+## Types d'index (PostgreSQL)
 
-| Type | Use case |
-|---|---|
-| `B-tree` | Default — equality and range queries (`=`, `<`, `>`, `BETWEEN`, `LIKE 'abc%'`) |
-| `Hash` | Equality only (`=`) — faster than B-tree for pure equality |
-| `GIN` | Full-text search, arrays, JSONB |
-| `GiST` | Geometric types, full-text search |
-| `BRIN` | Very large tables with naturally ordered data (timestamps, sequential IDs) |
+| Type | Opérateurs supportés | Use case |
+|---|---|---|
+| `B-tree` | `=`, `<`, `>`, `<=`, `>=`, `BETWEEN`, `LIKE 'abc%'` | Default — la quasi-totalité des cas |
+| `Hash` | `=` uniquement | Recherches d'égalité pure, légèrement plus rapide que B-tree |
+| `GIN` | `@>`, `&&`, `@@` | Recherche full-text, tableaux, JSONB |
+| `GiST` | Types géométriques, distances | Coordonnées GPS, formes géographiques |
+| `BRIN` | Plages sur données ordonnées | Très grandes tables avec données naturellement séquentielles (timestamps, IDs auto-incrémentés) |
+
+> Dans 95% des cas, un B-tree est le bon choix.
 
 ---
 
-## Composite indexes — column order matters
+## Index composite — l'ordre des colonnes compte
+
+Un index composite couvre plusieurs colonnes. Il peut servir les requêtes qui filtrent sur le **préfixe gauche** des colonnes.
 
 ```sql
 CREATE INDEX idx_orders_user_status ON orders (user_id, status);
 ```
 
-This index is used for:
-- `WHERE user_id = 1`
-- `WHERE user_id = 1 AND status = 'paid'`
+Cet index est utilisé pour :
+- `WHERE user_id = 1` ✅
+- `WHERE user_id = 1 AND status = 'paid'` ✅
 
-But **not** for:
-- `WHERE status = 'paid'` (leading column missing)
+Mais **pas** pour :
+- `WHERE status = 'paid'` ❌ — la colonne de tête est absente
 
-> Put the most selective column first, or the column used in equality conditions before range conditions.
+> Règle : mettre en premier la colonne la plus sélective, ou celle utilisée en égalité avant celles utilisées en plage.
 
 ---
 
-## Covering indexes
+## Index couvrant (covering index)
 
-An index that contains all columns needed by a query — no need to access the table at all.
+Un index qui contient toutes les colonnes nécessaires à une requête. La base peut répondre **sans lire la table** — on parle d'*index only scan*.
 
 ```sql
 CREATE INDEX idx_orders_covering ON orders (user_id, status, amount);
 
--- This query is served entirely from the index
+-- Cette requête est servie entièrement depuis l'index
 SELECT status, amount FROM orders WHERE user_id = 1;
 ```
 
 ---
 
-## When indexes are NOT used
+## Quand l'index n'est PAS utilisé
 
 ```sql
--- Function on indexed column — index on email won't be used
+-- Fonction sur la colonne indexée — l'index sur email est ignoré
 WHERE LOWER(email) = 'alice@example.com'
--- Fix: create an expression index
+-- Fix : créer un index sur l'expression
 CREATE INDEX ON users (LOWER(email));
 
--- Leading wildcard — can't use B-tree index
+-- Wildcard en début de LIKE — impossible à indexer en B-tree
 WHERE name LIKE '%alice%'
--- Fix: use full-text search (GIN index + tsvector)
+-- Fix : utiliser la recherche full-text (GIN + tsvector)
 
--- OR condition across different columns — may skip indexes
+-- Condition OR sur des colonnes différentes — peut ignorer les index
 WHERE email = 'x' OR phone = 'y'
--- Fix: rewrite as UNION
+-- Fix : réécrire en UNION
+SELECT * FROM users WHERE email = 'x'
+UNION
+SELECT * FROM users WHERE phone = 'y';
 
--- Implicit type cast — index on integer id won't be used if comparing to a string
-WHERE id = '123'
+-- Cast de type implicite — l'index sur id (integer) n'est pas utilisé si comparé à un string
+WHERE id = '123'       -- '123' est un string, id est un integer
+-- Fix : WHERE id = 123
 ```
 
 ---
 
 ## Common pitfalls
 
-- Over-indexing — every index slows down writes. Index columns used in WHERE, JOIN, and ORDER BY, not every column
-- Unused indexes — check with `pg_stat_user_indexes` in PostgreSQL and drop indexes with 0 scans
-- Forgetting that `NULL` values are indexed in PostgreSQL (but not in some other databases)
+- **Over-indexing** — chaque index ralentit les écritures. Indexer les colonnes utilisées dans `WHERE`, `JOIN`, et `ORDER BY`, pas toutes les colonnes
+- **Index inutilisés** — vérifier avec `pg_stat_user_indexes` et supprimer ceux avec `idx_scan = 0`
+- **Pas d'index sur les clés étrangères** — les joins sur les foreign keys sont lents sans index
