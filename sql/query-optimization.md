@@ -1,111 +1,122 @@
 # SQL — Query Optimization
 
-> Understanding and fixing slow queries.
+> Comprendre et corriger les requêtes lentes.
 
 ---
 
-## EXPLAIN — read the query plan
+## EXPLAIN — lire le plan d'exécution
+
+Avant d'optimiser, il faut comprendre ce que la base fait réellement. `EXPLAIN` montre le plan d'exécution choisi par le query planner.
 
 ```sql
 EXPLAIN SELECT * FROM orders WHERE user_id = 1;
-EXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 1;   -- actually runs the query
-EXPLAIN (ANALYZE, BUFFERS) SELECT ...;                    -- also shows cache hits
+-- Montre le plan prévu, sans exécuter la requête
+
+EXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 1;
+-- Exécute réellement la requête et compare plan prévu vs réel
+
+EXPLAIN (ANALYZE, BUFFERS) SELECT ...;
+-- Ajoute les informations sur les cache hits / disk reads
 ```
 
-### Key nodes to recognize
+### Nœuds clés à reconnaître
 
-| Node | What it means |
+| Nœud | Ce que ça signifie |
 |---|---|
-| `Seq Scan` | Full table scan — no index used |
-| `Index Scan` | Uses an index, fetches rows from table |
-| `Index Only Scan` | Uses a covering index — no table access |
-| `Nested Loop` | For each row in outer, scan inner — fast for small sets |
-| `Hash Join` | Builds a hash table — good for larger sets |
-| `Merge Join` | Both inputs sorted — efficient for large sorted sets |
-| `Sort` | Explicit sort — expensive without an index |
+| `Seq Scan` | Scan complet de la table — pas d'index utilisé |
+| `Index Scan` | Utilise un index, lit ensuite la table pour les colonnes manquantes |
+| `Index Only Scan` | Utilise un index couvrant — ne touche pas la table |
+| `Nested Loop` | Pour chaque ligne de la table externe, cherche dans l'interne — efficace pour les petits ensembles |
+| `Hash Join` | Construit une hash table — bon pour les grands ensembles |
+| `Merge Join` | Les deux entrées sont triées — efficace si déjà ordonnées |
+| `Sort` | Tri explicite — coûteux sans index sur la colonne |
 
-### Reading costs
+### Lire les coûts
 
 ```
-Seq Scan on orders (cost=0.00..1842.00 rows=50000 width=32)
-                          ↑ startup    ↑ total
+Seq Scan on orders  (cost=0.00..1842.00 rows=50000 width=32)
+                           ↑ démarrage   ↑ total
 ```
 
-Cost is an arbitrary unit. What matters is relative difference — a cost of 10 vs 10000 is significant.
+Le coût est une unité arbitraire. Ce qui compte c'est la différence relative — `cost=10` vs `cost=10000` est significatif. `rows` est l'estimation du planner — si elle est très éloignée du réel, les stats sont périmées.
 
 ---
 
-## Common slow patterns and fixes
+## Patterns lents et corrections
 
-### 1. Function on a filtered column
+### 1. Fonction sur une colonne filtrée — détruit l'index
 
 ```sql
--- Slow — can't use index on created_at
+-- Lent — l'index sur created_at n'est pas utilisé
 WHERE DATE(created_at) = '2024-01-01'
 
--- Fast — range query uses the index
+-- Rapide — la plage utilise l'index
 WHERE created_at >= '2024-01-01' AND created_at < '2024-01-02'
 ```
 
-### 2. N+1 queries — fetch once, not per row
+### 2. N+1 — une requête par ligne au lieu d'un JOIN
 
 ```sql
--- Bad — one query per order (N+1)
+-- Mauvais : 1 requête pour les orders + 1 par order pour le user
 SELECT * FROM orders;
--- then for each order: SELECT * FROM users WHERE id = ?
+-- puis pour chaque order : SELECT * FROM users WHERE id = ?
 
--- Good — one JOIN
+-- Bon : une seule requête
 SELECT o.*, u.name FROM orders o JOIN users u ON o.user_id = u.id;
 ```
 
-### 3. SELECT * — fetch only what you need
+> Le N+1 est invisible dans le code mais catastrophique en prod — 1000 orders = 1001 requêtes.
+
+### 3. SELECT * — transfère des colonnes inutiles
 
 ```sql
--- Bad — transfers all columns including large blobs
+-- Mauvais — transfère toutes les colonnes, y compris les blobs
 SELECT * FROM products;
 
--- Good
+-- Bon — uniquement ce dont on a besoin
 SELECT id, name, price FROM products;
 ```
 
-### 4. Subquery vs JOIN
+### 4. Sous-requête corrélée vs JOIN
+
+Une sous-requête corrélée est réévaluée pour chaque ligne de la requête externe.
 
 ```sql
--- Slower — correlated subquery runs once per row
+-- Plus lent — la sous-requête s'exécute une fois par utilisateur
 SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE amount > 100);
 
--- Faster — JOIN evaluated once
+-- Plus rapide — le JOIN est évalué une seule fois
 SELECT DISTINCT u.* FROM users u JOIN orders o ON u.id = o.user_id WHERE o.amount > 100;
 ```
 
-### 5. Large OFFSET pagination
+### 5. Pagination avec OFFSET élevé
 
 ```sql
--- Slow — must scan and discard 100000 rows
+-- Lent — la base scanne et jette 100 000 lignes
 SELECT * FROM orders ORDER BY id LIMIT 10 OFFSET 100000;
 
--- Fast — keyset pagination (cursor-based)
-SELECT * FROM orders WHERE id > 100000 ORDER BY id LIMIT 10;
+-- Rapide — keyset pagination : partir de la dernière valeur vue
+SELECT * FROM orders WHERE id > :last_seen_id ORDER BY id LIMIT 10;
 ```
 
 ---
 
-## Useful diagnostic queries (PostgreSQL)
+## Requêtes de diagnostic (PostgreSQL)
 
 ```sql
--- Slow queries log
-SELECT query, mean_exec_time, calls
+-- Requêtes les plus lentes (nécessite l'extension pg_stat_statements)
+SELECT query, calls, ROUND(mean_exec_time::numeric, 2) AS avg_ms
 FROM pg_stat_statements
 ORDER BY mean_exec_time DESC
 LIMIT 10;
 
--- Unused indexes
+-- Index jamais utilisés — candidats à la suppression
 SELECT schemaname, tablename, indexname, idx_scan
 FROM pg_stat_user_indexes
 WHERE idx_scan = 0;
 
--- Table sizes
-SELECT tablename, pg_size_pretty(pg_total_relation_size(tablename::regclass))
+-- Taille des tables
+SELECT tablename, pg_size_pretty(pg_total_relation_size(tablename::regclass)) AS size
 FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY pg_total_relation_size(tablename::regclass) DESC;
@@ -115,6 +126,6 @@ ORDER BY pg_total_relation_size(tablename::regclass) DESC;
 
 ## Common pitfalls
 
-- Optimizing before measuring — always EXPLAIN ANALYZE first, don't guess
-- Adding indexes blindly — verify the query plan actually uses them after creation
-- Ignoring `Seq Scan` on large tables — almost always a sign of a missing or unused index
+- **Optimiser avant de mesurer** — toujours `EXPLAIN ANALYZE` d'abord. L'intuition est souvent mauvaise
+- **Ajouter un index et supposer qu'il est utilisé** — vérifier avec `EXPLAIN` après création
+- **Ignorer les estimations de rows erronées** — un planner qui estime 100 rows alors qu'il y en a 1 million choisira le mauvais plan. Solution : `ANALYZE table`
