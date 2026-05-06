@@ -1,36 +1,87 @@
 # SQL — Joins
 
-> Combining rows from multiple tables.
+> Combiner des lignes de plusieurs tables en une seule requête.
 
 ---
 
-## Join types
+## Concept
+
+Un join relie deux tables sur une condition — généralement une clé étrangère. Sans join, on ferait plusieurs requêtes séparées et on assemblerait les résultats dans le code.
 
 ```sql
--- INNER JOIN — only rows that match in both tables
+-- Sans join : deux requêtes
+SELECT * FROM orders WHERE user_id = 1;
+SELECT * FROM users WHERE id = 1;
+
+-- Avec join : une seule requête
+SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id WHERE u.id = 1;
+```
+
+---
+
+## INNER JOIN — seulement les correspondances
+
+Retourne uniquement les lignes qui ont une correspondance dans les deux tables. Les lignes sans correspondance sont exclues des deux côtés.
+
+```sql
 SELECT u.name, o.amount
 FROM users u
 INNER JOIN orders o ON u.id = o.user_id;
+-- Résultat : uniquement les utilisateurs qui ont au moins une commande
+```
 
--- LEFT JOIN — all rows from left, matched rows from right (NULL if no match)
+---
+
+## LEFT JOIN — tout de la gauche
+
+Retourne toutes les lignes de la table de gauche, et les données correspondantes de la droite. Si aucune correspondance à droite, les colonnes droites valent `NULL`.
+
+```sql
 SELECT u.name, o.amount
 FROM users u
 LEFT JOIN orders o ON u.id = o.user_id;
+-- Résultat : tous les utilisateurs, même ceux sans commande (amount = NULL)
+```
 
--- RIGHT JOIN — all rows from right, matched rows from left (rare — rewrite as LEFT JOIN)
+> C'est le join le plus courant après INNER JOIN. Utile pour "je veux tous les X avec leurs Y s'ils en ont".
+
+---
+
+## RIGHT JOIN — tout de la droite
+
+Inverse du LEFT JOIN — toutes les lignes de la table de droite, correspondances ou NULL de la gauche. Rarement utilisé : on réécrit généralement en LEFT JOIN pour plus de clarté.
+
+```sql
 SELECT u.name, o.amount
 FROM orders o
 RIGHT JOIN users u ON u.id = o.user_id;
+-- Équivalent au LEFT JOIN ci-dessus, moins lisible
+```
 
--- FULL OUTER JOIN — all rows from both tables (NULL where no match)
+---
+
+## FULL OUTER JOIN — tout des deux côtés
+
+Retourne toutes les lignes des deux tables. `NULL` là où il n'y a pas de correspondance d'un côté ou de l'autre.
+
+```sql
 SELECT u.name, o.amount
 FROM users u
 FULL OUTER JOIN orders o ON u.id = o.user_id;
+-- Résultat : tous les utilisateurs + toutes les commandes, avec NULL où il manque une correspondance
+```
 
--- CROSS JOIN — every combination of rows (cartesian product)
+---
+
+## CROSS JOIN — produit cartésien
+
+Combine chaque ligne de la première table avec chaque ligne de la seconde. Rarement voulu — une table de 100 lignes × une autre de 100 lignes = 10 000 lignes.
+
+```sql
 SELECT u.name, p.name
 FROM users u
 CROSS JOIN products p;
+-- Utile pour générer toutes les combinaisons possibles (ex: tailles × couleurs)
 ```
 
 ---
@@ -38,22 +89,23 @@ CROSS JOIN products p;
 ## Visual reference
 
 ```
-LEFT JOIN          INNER JOIN         FULL OUTER JOIN
-┌───┬───┐         ┌───┬───┐          ┌───┬───┐
-│ A │   │         │   │ B │          │ A │ B │
-│ A │ B │         │ A │ B │          │ A │ B │
-│   │ B │         └───┴───┘          │   │ B │
-└───┴───┘                            └───┴───┘
+INNER JOIN         LEFT JOIN          FULL OUTER JOIN
+  ┌──┬──┐           ┌──┬──┐            ┌──┬──┐
+  │  │B │           │A │  │            │A │  │
+  │A │B │           │A │B │            │A │B │
+  └──┴──┘           │  │B │            │  │B │
+  matches only      └──┴──┘            └──┴──┘
+                    all left           all rows
 ```
 
 ---
 
-## Self-join
+## Self-join — joindre une table sur elle-même
 
-Join a table to itself — useful for hierarchies or comparing rows within the same table.
+Une table jointe avec elle-même, avec deux alias différents. Utile pour les hiérarchies.
 
 ```sql
--- Find employees and their manager (same table)
+-- Employés et leur manager (même table employees)
 SELECT e.name AS employee, m.name AS manager
 FROM employees e
 LEFT JOIN employees m ON e.manager_id = m.id;
@@ -61,7 +113,7 @@ LEFT JOIN employees m ON e.manager_id = m.id;
 
 ---
 
-## Multiple joins
+## Multiple joins — chaîner plusieurs tables
 
 ```sql
 SELECT u.name, o.amount, p.name AS product
@@ -76,17 +128,19 @@ WHERE o.status = 'paid';
 
 ## Common pitfalls
 
-- **Missing join condition** — a forgotten `ON` clause produces a cartesian product (every row × every row)
-- **Ambiguous columns** — always qualify with table alias when joining (`u.id` not just `id`)
-- **LEFT JOIN + WHERE on right table** — filtering on a nullable column from the right table turns a LEFT JOIN into an INNER JOIN
+**LEFT JOIN + WHERE sur la table de droite** — le filtre dans WHERE annule l'effet du LEFT JOIN et le transforme en INNER JOIN.
 
 ```sql
--- Bug: WHERE cancels the LEFT JOIN effect
+-- Bug : les utilisateurs sans commande sont exclus à cause du WHERE
 SELECT * FROM users u
 LEFT JOIN orders o ON u.id = o.user_id
-WHERE o.status = 'paid';   -- users with no orders are excluded
+WHERE o.status = 'paid';
 
--- Fix: move the condition to ON
+-- Fix : déplacer la condition dans le ON
 SELECT * FROM users u
 LEFT JOIN orders o ON u.id = o.user_id AND o.status = 'paid';
 ```
+
+**Colonnes ambiguës** — quand deux tables ont une colonne du même nom, toujours qualifier avec l'alias (`u.id`, pas `id`).
+
+**JOIN sans ON** — produit un cartesian product silencieux sur certaines bases. Toujours spécifier la condition de jointure.
