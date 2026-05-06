@@ -13,7 +13,7 @@ Personal knowledge base — quick-reference notes and cheat sheets I maintain ac
 | ✅ | [Git](./git/README.md) | Branching, rebase, stash, hooks, worktrees |
 | ✅ | [Docker](./docker/README.md) | Images, containers, Compose, networking, volumes |
 | ✅ | [SQL](./sql/README.md) | Joins, window functions, indexes, query optimization |
-| ☐ | JavaScript / TypeScript | Async patterns, TS config, generics |
+| ✅ | [JavaScript / TypeScript](./js-ts/README.md) | Async patterns, TS config, generics |
 | ☐ | Python | |
 | ☐ | Linux / Bash | Shell scripting, process management, permissions, cron |
 | ☐ | Cloud | AWS — IAM, networking, compute, storage |
