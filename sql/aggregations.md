@@ -1,54 +1,77 @@
 # SQL — Aggregations
 
-> Summarizing data with GROUP BY and aggregate functions.
+> Résumer des données en regroupant des lignes et en calculant des statistiques.
 
 ---
 
-## Aggregate functions
+## Concept
+
+Les fonctions d'agrégation calculent une valeur à partir d'un ensemble de lignes. Sans `GROUP BY`, elles s'appliquent à toute la table et retournent une seule ligne.
 
 ```sql
-SELECT COUNT(*)           FROM orders;                 -- total rows
-SELECT COUNT(email)       FROM users;                  -- non-NULL values only
-SELECT COUNT(DISTINCT country) FROM users;             -- unique values
-SELECT SUM(amount)        FROM orders;
-SELECT AVG(amount)        FROM orders;
-SELECT MIN(created_at)    FROM orders;
-SELECT MAX(amount)        FROM orders;
+SELECT COUNT(*), SUM(amount), AVG(amount) FROM orders;
+-- Retourne une seule ligne avec les totaux pour toute la table
 ```
 
-> `COUNT(*)` counts all rows including NULLs. `COUNT(column)` skips NULLs.
+---
+
+## Fonctions d'agrégation
+
+```sql
+SELECT COUNT(*)                FROM orders;   -- nombre total de lignes
+SELECT COUNT(email)            FROM users;    -- lignes où email n'est pas NULL
+SELECT COUNT(DISTINCT country) FROM users;    -- nombre de pays uniques
+SELECT SUM(amount)             FROM orders;   -- somme
+SELECT AVG(amount)             FROM orders;   -- moyenne
+SELECT MIN(created_at)         FROM orders;   -- valeur minimale
+SELECT MAX(amount)             FROM orders;   -- valeur maximale
+```
+
+> `COUNT(*)` compte toutes les lignes y compris celles avec des NULLs. `COUNT(colonne)` ignore les NULLs — le résultat peut être différent.
 
 ---
 
-## GROUP BY
+## GROUP BY — regrouper les lignes
+
+`GROUP BY` divise les lignes en groupes selon une ou plusieurs colonnes, puis applique la fonction d'agrégation à chaque groupe séparément.
 
 ```sql
--- Orders per user
+-- Nombre de commandes par utilisateur
 SELECT user_id, COUNT(*) AS order_count
 FROM orders
 GROUP BY user_id;
+```
 
--- Revenue per country per month
-SELECT country, DATE_TRUNC('month', created_at) AS month, SUM(amount) AS revenue
+Sans `GROUP BY` : une seule ligne avec le total global.
+Avec `GROUP BY user_id` : une ligne par utilisateur avec son total.
+
+```sql
+-- Chiffre d'affaires par pays et par mois
+SELECT
+  country,
+  DATE_TRUNC('month', created_at) AS month,
+  SUM(amount) AS revenue
 FROM orders
 GROUP BY country, DATE_TRUNC('month', created_at)
 ORDER BY month DESC;
 ```
 
-> Every column in SELECT must either be in GROUP BY or wrapped in an aggregate function.
+> Règle : toute colonne dans `SELECT` doit être soit dans `GROUP BY`, soit dans une fonction d'agrégation. Sinon la base de données ne sait pas quelle valeur afficher pour le groupe.
 
 ---
 
-## HAVING — filter on aggregated results
+## HAVING — filtrer les groupes
+
+`WHERE` filtre les lignes avant le groupement. `HAVING` filtre les groupes après l'agrégation — il peut donc utiliser les résultats des fonctions d'agrégation.
 
 ```sql
--- Users with more than 5 orders
+-- Utilisateurs avec plus de 5 commandes
 SELECT user_id, COUNT(*) AS order_count
 FROM orders
 GROUP BY user_id
 HAVING COUNT(*) > 5;
 
--- Countries with average order above 100
+-- Pays dont le panier moyen dépasse 100
 SELECT country, AVG(amount) AS avg_order
 FROM orders
 GROUP BY country
@@ -56,22 +79,26 @@ HAVING AVG(amount) > 100
 ORDER BY avg_order DESC;
 ```
 
-> `WHERE` filters rows **before** aggregation. `HAVING` filters **after**. Use WHERE when possible — it's more efficient.
+> Utiliser `WHERE` pour filtrer les lignes brutes (avant GROUP BY) et `HAVING` pour filtrer les résultats agrégés. `WHERE` est plus efficace car il réduit les données avant le groupement.
 
 ---
 
-## Execution order
+## Ordre d'exécution d'une requête SQL
 
-```sql
+SQL s'exécute dans cet ordre, peu importe l'ordre d'écriture :
+
+```
 FROM → JOIN → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT
 ```
 
-This matters when writing queries: you can't use a SELECT alias in WHERE or HAVING (it hasn't been computed yet).
+Conséquences pratiques :
+- On ne peut pas utiliser un alias défini dans `SELECT` dans un `WHERE` ou `HAVING` — l'alias n'existe pas encore à ce moment
+- `WHERE` ne peut pas filtrer sur un résultat agrégé — utiliser `HAVING`
 
 ---
 
 ## Common pitfalls
 
-- Using WHERE instead of HAVING to filter aggregated results — WHERE runs before GROUP BY and can't see aggregate values
-- Selecting a column not in GROUP BY — most databases reject this (MySQL in strict mode, PostgreSQL always)
-- `AVG` on integers silently truncates in some databases — cast to float: `AVG(amount::float)`
+- Utiliser `WHERE` pour filtrer un agrégat — `WHERE COUNT(*) > 5` est invalide, `HAVING COUNT(*) > 5` est correct
+- Sélectionner une colonne qui n'est pas dans `GROUP BY` — la plupart des bases rejettent ça (sauf MySQL en mode non-strict)
+- `AVG` sur des entiers peut tronquer silencieusement en fonction de la base — caster si besoin : `AVG(amount::numeric)`
